@@ -1,0 +1,176 @@
+From a1ec3e984dbcc2ec600521ff004da4ae70a8c8ec Mon Sep 17 00:00:00 2001
+From: a@a.com
+Date: Mon, 14 Sep 2020 00:03:01 -0700
+Subject: [PATCH] local debugging changes
+
+---
+ include/helib/Ctxt.h  |  2 ++
+ include/helib/keys.h  |  2 ++
+ include/helib/norms.h |  6 ++++++
+ src/Makefile          |  2 +-
+ src/keys.cpp          |  8 ++++++-
+ src/norms.cpp         | 50 ++++++++++++++++++++++++++++++++++++++++---
+ 6 files changed, 65 insertions(+), 5 deletions(-)
+
+diff --git a/include/helib/Ctxt.h b/include/helib/Ctxt.h
+index dcd70fa..ce1f7cf 100644
+--- a/include/helib/Ctxt.h
++++ b/include/helib/Ctxt.h
+@@ -400,6 +400,8 @@ public:
+     return privateAssign(other);
+   }
+ 
++  CtxtPart const& getPart(size_t i) const { return parts[i]; }
++
+   bool operator==(const Ctxt& other) const { return equalsTo(other); }
+   bool operator!=(const Ctxt& other) const { return !equalsTo(other); }
+ 
+diff --git a/include/helib/keys.h b/include/helib/keys.h
+index 64dd8a6..1686e47 100644
+--- a/include/helib/keys.h
++++ b/include/helib/keys.h
+@@ -322,6 +322,8 @@ double RLWE(DoubleCRT& c0,
+ //! Same as RLWE, but assumes that c1 is already chosen by the caller
+ double RLWE1(DoubleCRT& c0, const DoubleCRT& c1, const DoubleCRT& s, long p);
+ 
++extern NTL::ZZX decrypted_ptxt_;
++
+ } // namespace helib
+ 
+ #endif // HELIB_KEYS_H
+diff --git a/include/helib/norms.h b/include/helib/norms.h
+index 3c367e9..e490f5f 100644
+--- a/include/helib/norms.h
++++ b/include/helib/norms.h
+@@ -123,6 +123,12 @@ void CKKS_embedInSlots(zzX& f,
+                        const PAlgebra& palg,
+                        double scaling);
+ 
++//! Encode into ZZX to avoid integer overflow
++void CKKS_embedInSlots(NTL::ZZX& f,
++                       const std::vector<cx_double>& v,
++                       const PAlgebra& palg,
++                       double scaling);
++
+ } // namespace helib
+ 
+ #endif // ifndef HELIB_NORMS_H
+diff --git a/src/Makefile b/src/Makefile
+index d9e20cd..200e2aa 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -16,7 +16,7 @@ AR = ar
+ ARFLAGS=rv
+ GMP=-lgmp
+ NTL=-lntl
+-COPT=-g -O2 -march=native
++COPT=-g -O3 -march=native
+ INC_HELIB=-I../include/
+ LEGACY_TESTS=../misc/legacy_tests/
+ 
+diff --git a/src/keys.cpp b/src/keys.cpp
+index 4e5910b..aa20f39 100644
+--- a/src/keys.cpp
++++ b/src/keys.cpp
+@@ -21,7 +21,7 @@
+ #include <helib/apiAttributes.h>
+ #include <helib/fhe_stats.h>
+ #include <helib/log.h>
+-
++#include <helib/debugging.h>
+ namespace helib {
+ 
+ /******** Utility function to generate RLWE instances *********/
+@@ -1109,6 +1109,10 @@ void SecKey::Decrypt(NTL::ZZX& plaintxt,
+ 
+   f = plaintxt; // f used only for debugging
+ 
++
++  decrypted_ptxt_ = plaintxt;
++
++
+   if (isCKKS())
+     return; // CKKS encryption, nothing else to do
+   // NOTE: calling application must still divide by ratFactor after decoding
+@@ -1345,4 +1349,6 @@ void readSecKeyBinary(std::istream& str, SecKey& sk)
+   assertEq(eyeCatcherFound, 0, "Could not find post-secret key eyecatcher");
+ }
+ 
++NTL::ZZX decrypted_ptxt_;
++
+ } // namespace helib
+diff --git a/src/norms.cpp b/src/norms.cpp
+index ca7f0ff..7aac2d7 100644
+--- a/src/norms.cpp
++++ b/src/norms.cpp
+@@ -22,7 +22,7 @@
+ #include <helib/PAlgebra.h>
+ #include <helib/fhe_stats.h>
+ #include <helib/range.h>
+-
++#include <helib/log.h>
+ namespace helib {
+ 
+ #define USE_HALF_FFT (1)
+@@ -603,12 +603,56 @@ void CKKS_embedInSlots(zzX& f,
+ 
+   hfft.fft.apply(&buf[0]);
+   f.SetLength(m / 2);
+-  for (long i : range(m / 2))
+-    f[i] = std::round(MUL(buf[i], pow[i]).real() * scaling);
++  for (long i : range(m / 2)) {
++    double fi = std::round(MUL(buf[i], pow[i]).real() * scaling);
++    if (fi > std::pow(2,63) || fi < std::pow(2,63)*(-1)) {
++       Warning("overflow in converting to zzX");
++    }
++    f[i] = fi;
++  }
+ 
+   normalize(f);
+ }
+ 
++
++void CKKS_embedInSlots(NTL::ZZX& f,
++                       const std::vector<cx_double>& v,
++                       const PAlgebra& palg,
++                       double scaling)
++
++{
++  long v_sz = v.size();
++  long m = palg.getM();
++
++  if (!(palg.getP() == -1 && palg.getPow2() >= 2))
++    throw LogicError("bad args to CKKS_canonicalEmbedding");
++
++  std::vector<cx_double> buf(m / 2, cx_double(0));
++  for (long i : range(m / 4)) {
++    long j = palg.ith_rep(i);
++    long ii = m / 4 - i - 1;
++    if (ii < v_sz) {
++      buf[j >> 1] = std::conj(v[ii]);
++      buf[(m - j) >> 1] = v[ii];
++    }
++  }
++
++  const half_FFT& hfft = palg.getHalfFFTInfo();
++  const cx_double* pow = &hfft.pow[0];
++
++  scaling /= (m / 2);
++  // This is becuase DFT^{-1} = 1/(m/2) times a DFT matrix for conj(V)
++
++  hfft.fft.apply(&buf[0]);
++  f.SetLength(m / 2);
++  for (long i : range(m / 2)) {
++    double fi = std::round(MUL(buf[i], pow[i]).real() * scaling);
++    f[i] = NTL::to_ZZ(fi);
++  }
++
++  f.normalize();
++}
++
+ // === obsolete versions of canonical embedding and inverse ===
+ 
+ // These are less efficient, and seem to have some logic errors.
+-- 
+2.17.1
+
