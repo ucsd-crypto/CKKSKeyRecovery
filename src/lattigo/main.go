@@ -197,8 +197,31 @@ func InvPolyNTT(r *ring.Ring, level uint64, p1, p2 *ring.Poly) {
 
 func inftyNorm(r *ring.Ring, p *ring.Poly, N uint64) *big.Int {
 	max := new(big.Int)
+​
+	level := uint64(len(p.Coeffs)-1)
+​
 	bigintCoeffs := make([]*big.Int, N)
 	r.PolyToBigint(p, bigintCoeffs)
+​
+	QBigInt := ring.NewUint(1)
+	for i := range r.Modulus[:level+1]{
+		QBigInt.Mul(QBigInt, ring.NewUint(r.Modulus[i]))
+	}
+​
+	QHalfBigInt := new(big.Int)
+	QHalfBigInt.Set(QBigInt)
+	QHalfBigInt.Rsh(QBigInt, 1)
+​
+	// Centers and absolute values
+	var sign int
+	for i := range bigintCoeffs{
+		sign = bigintCoeffs[i].Cmp(QHalfBigInt)
+		if sign == 1 || sign == 0 {
+			bigintCoeffs[i].Sub(bigintCoeffs[i], QBigInt)
+			bigintCoeffs[i].Abs(bigintCoeffs[i])
+		}
+	}
+​
 	for i := uint64(0); i < r.N; i++ {
 		if bigintCoeffs[i].Cmp(max) > 0 {
 			max = bigintCoeffs[i]
