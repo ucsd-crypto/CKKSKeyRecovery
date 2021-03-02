@@ -1,8 +1,8 @@
 # Key recovery attacks against the CKKS homomorphic approximate encryption scheme
 
-This repository contains experimental program code implementing our key recovery attacks against the CKKS scheme. Current implementations work with libraries HEAAN, PALISADE, SEAL, HElib, and RNS-HEAAN.
+This repository contains experimental program code implementing our key recovery attacks against the CKKS scheme. Current implementations work with libraries HEAAN, PALISADE, SEAL, HElib, RNS-HEAAN, and Lattigo.
 
-## Build instructions
+## Build instructions (for all libraries except Lattigo)
 
 Makefile expects the HEAAN library to be installed in the current directory.
 Install HEAAN and create a symbolic link. For example, if HEAAN is cloned
