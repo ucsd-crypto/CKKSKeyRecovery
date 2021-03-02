@@ -86,3 +86,31 @@ if the secret key is successfully recovered at the end of a run.
 For HEAAN, since power-of-2 modulus is used, with certain probability an inverse
 may not exist for the a part of a ciphertext, but the encoding error indicates
 if gaussian elimination can be used when collecting a few more ciphertexts.
+
+
+## How to build and run the attack program with Lattigo
+
+Lattigo is written in the GO programming language, and it uses a different programming
+environment, so it is a bit different to build and run the attack program than with
+other libraries. The source code of the Lattigo version of our attack program is placed
+under `src/lattigo`, and it is compatible with the Lattigo version v2.0.0. To build and
+run it, first retrieve the Lattigo source tree from https://github.com/ldsec/lattigo,
+and check out version v2.0.0:
+
+     git checkout -b v2.0.0
+
+Then modify `go.mod` under `src/lattigo` by replacing "/scratch/lattigo" with the path
+to the lattigo source tree on your computer. Now, we are ready to build the attack program:
+
+     cd src/lattigo
+     go build
+
+This should build an executable `ckks_attack`. To run, simply execute `./ckks_attack`.
+
+Lattigo implemented some mitigation strategies in the branch `dev_indCPA+_mitigation`,
+which is based on the API in version v2.1.0. A modified attack program compatible with
+this branch can be found in `src/lattigo_new`, and it can be built in the similr way.
+Note that the parameters to encoder.DecodeAndRound should be chosen carefully for the mitigation to work.
+
+
+
