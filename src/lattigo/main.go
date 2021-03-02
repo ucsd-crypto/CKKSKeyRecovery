@@ -26,8 +26,6 @@ func randomComplex(min, max float64) complex128 {
 ////////////////////////////////////////////////////////////////////////////////
 func attack_sigmoid() {
 
-	var err error
-
 	// This demo is modified on top of the example code lattigo/sigmoid.
 	// The following computation packs random 8192 float64 values in the range [-8, 8]
 	// and approximates the function 1/(exp(-x) + 1) over the range [-8, 8].
@@ -89,9 +87,8 @@ func attack_sigmoid() {
 	chebyapproximation := ckks.Approximate(f, -8, 8, 33)
 
 	// We evaluate the interpolated Chebyshev interpolant on the ciphertext
-	if ciphertext, err = evaluator.EvaluateCheby(ciphertext, chebyapproximation, rlk); err != nil {
-		panic(err)
-	}
+	ciphertext = evaluator.EvaluateCheby(ciphertext, chebyapproximation, rlk)
+
 	fmt.Println("Done... Consumed levels:", params.MaxLevel()-ciphertext.Level())
 
 	// Computation of the reference values
@@ -197,21 +194,21 @@ func InvPolyNTT(r *ring.Ring, level uint64, p1, p2 *ring.Poly) {
 
 func inftyNorm(r *ring.Ring, p *ring.Poly, N uint64) *big.Int {
 	max := new(big.Int)
-​
+
 	level := uint64(len(p.Coeffs)-1)
-​
+
 	bigintCoeffs := make([]*big.Int, N)
 	r.PolyToBigint(p, bigintCoeffs)
-​
+
 	QBigInt := ring.NewUint(1)
 	for i := range r.Modulus[:level+1]{
 		QBigInt.Mul(QBigInt, ring.NewUint(r.Modulus[i]))
 	}
-​
+
 	QHalfBigInt := new(big.Int)
 	QHalfBigInt.Set(QBigInt)
 	QHalfBigInt.Rsh(QBigInt, 1)
-​
+
 	// Centers and absolute values
 	var sign int
 	for i := range bigintCoeffs{
@@ -221,7 +218,7 @@ func inftyNorm(r *ring.Ring, p *ring.Poly, N uint64) *big.Int {
 			bigintCoeffs[i].Abs(bigintCoeffs[i])
 		}
 	}
-​
+
 	for i := uint64(0); i < r.N; i++ {
 		if bigintCoeffs[i].Cmp(max) > 0 {
 			max = bigintCoeffs[i]
